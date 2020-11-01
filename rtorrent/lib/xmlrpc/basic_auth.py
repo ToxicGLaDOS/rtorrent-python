@@ -20,7 +20,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-from base64 import encodestring
+from base64 import b64encode
 import string
 try:
     import xmlrpc.client as xmlrpclib
@@ -30,33 +30,25 @@ except:
 
 class BasicAuthTransport(xmlrpclib.Transport):
     def __init__(self, username=None, password=None):
-        xmlrpclib.Transport.__init__(self)
-
         self.username = username
         self.password = password
+        auth_headers = self.get_auth_headers()
+        xmlrpclib.Transport.__init__(self, headers=[auth_headers])
 
-    def send_auth(self, h):
+
+
+    def get_auth_headers(self):
         if self.username is not None and self.password is not None:
-            h.putheader('AUTHORIZATION', "Basic %s" % string.replace(
-                encodestring("%s:%s" % (self.username, self.password)),
-                "\012", ""
-            ))
+            b64 = str(b64encode(f"{self.username}:{self.password}".encode("utf-8")), "utf-8")
+            auth_value = f"Basic {b64}"
+            return ('AUTHORIZATION', auth_value)
 
     def single_request(self, host, handler, request_body, verbose=0):
         # issue XML-RPC request
 
-        h = self.make_connection(host)
-        if verbose:
-            h.set_debuglevel(1)
-
         try:
-            self.send_request(h, handler, request_body)
-            self.send_host(h, host)
-            self.send_user_agent(h)
-            self.send_auth(h)
-            self.send_content(h, request_body)
-
-            response = h.getresponse(buffering=True)
+            connection = self.send_request(host, handler, request_body, False)
+            response = connection.getresponse()
             if response.status == 200:
                 self.verbose = verbose
                 return self.parse_response(response)
